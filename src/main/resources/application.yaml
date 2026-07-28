@@ -1,0 +1,69 @@
+server:
+  port: 8090
+
+spring:
+  application:
+    name: pg-ms-auth
+  datasource:
+    url: jdbc:postgresql://aws-0-us-east-1.pooler.supabase.com:5432/postgres?currentSchema=auth_schema&ssl=true&sslmode=require
+    username: postgres.dsnqzletdqoyljapyoba
+    password: ${SUPABASE_PASSWORD}
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+  cloud:
+    consul:
+      host: consul
+      port: 8500
+      discovery:
+        register: true
+        health-check-path: /actuator/health
+        prefer-ip-address: false
+        instance-id: ${spring.application.name}
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          timeout: 5000
+          connectiontimeout: 5000
+          writetimeout: 5000
+    protocol: smtp
+    default-encoding: UTF-8
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+  endpoint:
+    health:
+      show-details: always
+
+security:
+  jwt:
+    secret-key: ${JWT_SECRET}
+    token-expiration: 3600000
+    reset-token-expiration-minutes: 10
+
+microservicio:
+  notificaciones:
+    url: ${NOTIFICACIONES_SERVICE_URL:http://pg-ms-notifications:8083}
+biometric:
+  jwt:
+    secret-key: ${BIOMETRIC_JWT_SECRET}
+    token-expiration: 300000
+
+logging:
+  level:
+    com.pulse_gym: DEBUG
+    com.pulse_gym.ms_auth.services: DEBUG
+    org.springframework.web: DEBUG

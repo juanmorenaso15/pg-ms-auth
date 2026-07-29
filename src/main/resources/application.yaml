@@ -5,15 +5,9 @@ spring:
   application:
     name: pg-ms-auth
   datasource:
-    url: jdbc:postgresql://aws-0-us-east-1.pooler.supabase.com:6543/postgres?currentSchema=auth_schema&ssl=true&sslmode=require
-    username: postgres.dsnqzletdqoyljapyoba
+    url: ${SUPABASE_URL_AUTH}
+    username: ${SUPABASE_USER}
     password: ${SUPABASE_PASSWORD}
-    hikari:
-      maximum-pool-size: 2
-      minimum-idle: 1
-      idle-timeout: 180000
-      connection-timeout: 20000
-      max-lifetime: 300000
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:

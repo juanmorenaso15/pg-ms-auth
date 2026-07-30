@@ -8,6 +8,17 @@ spring:
     url: ${SUPABASE_URL_AUTH}
     username: ${SUPABASE_USER}
     password: ${SUPABASE_PASSWORD}
+
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 2
+      idle-timeout: 300000
+      connection-timeout: 30000
+      max-lifetime: 1800000
+      leak-detection-threshold: 30000
+      pool-name: HikariPool-Auth
+      data-source-properties:
+        prepareThreshold: 0 
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:

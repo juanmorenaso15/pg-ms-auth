@@ -1,5 +1,8 @@
 package com.pulse_gym.ms_auth.controller;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -30,6 +33,7 @@ import com.pulse_gym.ms_auth.services.BiometricTokenService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.RequestParam;
 
 @RestController
 @RequiredArgsConstructor
@@ -261,4 +265,17 @@ public class AuthController {
                     .body(new MessegeGlobalDTO("Error al cambiar la contraseña"));
         }
     }
+
+    @GetMapping("/usuarios")
+    public ResponseEntity<List<AuthUserDTO>> obtenerTodosLosUsuarios(
+            @RequestHeader(value = "X-User-Rol", required = false) String rol) {
+        try {
+            List<AuthUserDTO> usuarios = authService.obtenerUsuarios(rol);
+            return ResponseEntity.status(HttpStatus.OK).body(usuarios);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+        }
+    }
+    
 }

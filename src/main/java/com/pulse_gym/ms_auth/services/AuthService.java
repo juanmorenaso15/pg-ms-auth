@@ -1,6 +1,7 @@
 package com.pulse_gym.ms_auth.services;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -12,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.pulse_gym.lb_common.client.AuthServiceClient;
 import com.pulse_gym.lb_common.client.NotificacionClient;
 import com.pulse_gym.lb_common.client.UsuarioClient;
+import com.pulse_gym.lb_common.dto.AuthUserDTO;
 import com.pulse_gym.lb_common.dto.ChangePasswordRequestDTO;
 import com.pulse_gym.lb_common.dto.ContrasenaOlvidada;
 import com.pulse_gym.lb_common.dto.EnvioEventoNotificacionDTO;
@@ -25,6 +27,7 @@ import com.pulse_gym.lb_common.entity.auth.User;
 import com.pulse_gym.lb_common.enums.EnumEventoAsociado;
 import com.pulse_gym.lb_common.services.BiometricJwtService;
 import com.pulse_gym.lb_common.services.JwtService;
+import com.pulse_gym.lb_common.services.ValidacionDeRoles;
 import com.pulse_gym.ms_auth.dto.LoginRequestDTO;
 import com.pulse_gym.ms_auth.dto.RegisterRequestDTO;
 import com.pulse_gym.ms_auth.repository.PasswordResetTokenRepository;
@@ -392,5 +395,27 @@ public class AuthService {
         userAuthRepository.save(user);
 
         return new MessegeGlobalDTO("Contraseña actualizada exitosamente");
+    }
+
+    /**
+     * Obtiene todos los usuarios del sistema.
+     * 
+     * @param rol (opcional) Filtra por rol si se proporciona
+     * @return Lista de usuarios autenticados
+     */
+    public List<AuthUserDTO> obtenerUsuarios(String rol) {
+        ValidacionDeRoles.validarAdmin(rol);
+
+        List<User> usuarios = userAuthRepository.findAll();
+
+        return usuarios.stream().map(user -> {
+            AuthUserDTO dto = new AuthUserDTO();
+            dto.setId(user.getId());
+            dto.setEmail(user.getEmail());
+            dto.setUsername(user.getUsername());
+            dto.setRol(user.getRol());
+            dto.setEstado(user.getEstado());
+            return dto;
+        }).toList();
     }
 }

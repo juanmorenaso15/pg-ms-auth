@@ -418,4 +418,17 @@ public class AuthService {
             return dto;
         }).toList();
     }
+
+    public MessegeGlobalDTO cambiarEstadoUsuario(Long id, String rol) {
+        ValidacionDeRoles.validarAdmin(rol);
+
+        User user = userAuthRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+
+        boolean nuevoEstado = !Boolean.TRUE.equals(user.getEstado());
+        user.setEstado(nuevoEstado);
+        userAuthRepository.save(user);
+
+        return new MessegeGlobalDTO("Estado del usuario actualizado exitosamente");
+    }
 }

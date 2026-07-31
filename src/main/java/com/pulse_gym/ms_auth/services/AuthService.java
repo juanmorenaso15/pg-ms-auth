@@ -1,11 +1,10 @@
 package com.pulse_gym.ms_auth.services;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -14,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.pulse_gym.lb_common.client.AuthServiceClient;
 import com.pulse_gym.lb_common.client.NotificacionClient;
 import com.pulse_gym.lb_common.client.UsuarioClient;
+import com.pulse_gym.lb_common.dto.AuthUserDTO;
 import com.pulse_gym.lb_common.dto.ChangePasswordRequestDTO;
 import com.pulse_gym.lb_common.dto.ContrasenaOlvidada;
 import com.pulse_gym.lb_common.dto.EnvioEventoNotificacionDTO;
@@ -27,6 +27,7 @@ import com.pulse_gym.lb_common.entity.auth.User;
 import com.pulse_gym.lb_common.enums.EnumEventoAsociado;
 import com.pulse_gym.lb_common.services.BiometricJwtService;
 import com.pulse_gym.lb_common.services.JwtService;
+import com.pulse_gym.lb_common.services.ValidacionDeRoles;
 import com.pulse_gym.ms_auth.dto.LoginRequestDTO;
 import com.pulse_gym.ms_auth.dto.RegisterRequestDTO;
 import com.pulse_gym.ms_auth.repository.PasswordResetTokenRepository;
@@ -37,8 +38,6 @@ import lombok.RequiredArgsConstructor;
 @Service
 @RequiredArgsConstructor
 public class AuthService {
-
-    private static final Logger logger = LoggerFactory.getLogger(AuthService.class);
 
     /** Repositorio para operaciones CRUD de usuarios de autenticación */
     private final UserAuthRepository userAuthRepository;
@@ -94,10 +93,7 @@ public class AuthService {
      *         existe
      */
     public MessegeGlobalDTO register(RegisterRequestDTO requestDTO) {
-        logger.info("=== PASO 1: Iniciando registro para email: {} ===", requestDTO.getEmail());
-
         if (userAuthRepository.findByEmail(requestDTO.getEmail()).isPresent()) {
-            logger.warn("=== PASO 2: Email ya existe: {} ===", requestDTO.getEmail());
             return new MessegeGlobalDTO("El correo ya esta en uso");
         }
 
@@ -105,7 +101,6 @@ public class AuthService {
             return new MessegeGlobalDTO("El nombre de usuario ya está en uso");
         }
 
-        logger.info("=== PASO 3: Creando usuario ===");
         User user = new User();
         user.setEmail(requestDTO.getEmail());
         user.setPassword(passwordEncoder.encode(requestDTO.getPassword()));
@@ -114,21 +109,12 @@ public class AuthService {
         user.setEstado(requestDTO.getEstado());
         user.setFechaRegistro(LocalDateTime.now());
 
-        logger.info("=== PASO 4: Guardando usuario en BD ===");
         userAuthRepository.save(user);
-        logger.info("=== PASO 5: Usuario guardado con ID: {} ===", user.getId());
-
-        logger.info("=== PASO 6: Verificando notificacionClient, es null? {} ===", notificacionClient == null);
 
         if (notificacionClient != null) {
-            logger.info("=== PASO 7: Llamando a enviarNotificacionRegistro ===");
             enviarNotificacionRegistro(user);
-            logger.info("=== PASO 8: enviarNotificacionRegistro finalizado ===");
-        } else {
-            logger.error("=== PASO 8 ERROR: notificacionClient es NULL ===");
         }
 
-        logger.info("=== PASO 9: Registro completado exitosamente ===");
         return new MessegeGlobalDTO("Se ha registrado correctamente");
     }
 
@@ -139,10 +125,6 @@ public class AuthService {
      */
     private void enviarNotificacionRegistro(User user) {
         try {
-            logger.info(">>> INICIANDO envío de notificación de registro para usuario: {}", user.getEmail());
-            logger.info(">>> ID de usuario: {}", user.getId());
-            logger.info(">>> Evento: {}", EnumEventoAsociado.REGISTRO_USUARIO);
-
             EnvioEventoNotificacionDTO eventoDTO = new EnvioEventoNotificacionDTO();
             eventoDTO.setUsuarioId(user.getId());
             eventoDTO.setEvento(EnumEventoAsociado.REGISTRO_USUARIO);
@@ -152,15 +134,9 @@ public class AuthService {
                     "nombre", user.getUsername(),
                     "fecha_registro", LocalDateTime.now().toString()));
 
-            logger.info(">>> Llamando a notificacionClient.enviarPorEvento con DTO: {}", eventoDTO);
-
-            Map<String, Object> respuesta = notificacionClient.enviarPorEvento(eventoDTO);
-            logger.info(">>> Respuesta de notificacionClient: {}", respuesta);
-
-            logger.info(">>> Notificación de registro enviada exitosamente");
+            notificacionClient.enviarPorEvento(eventoDTO);
         } catch (Exception e) {
-            logger.error(">>> ERROR CRÍTICO al enviar notificación: {}", e.getMessage(), e);
-            e.printStackTrace();
+            // Se omite el registro para evitar logs en el servicio.
         }
     }
 
@@ -172,13 +148,10 @@ public class AuthService {
      * @return Respuesta con token JWT y mensaje de éxito o error
      */
     public HttpGlobalResponse<JwtDTO> login(LoginRequestDTO requestDTO) {
-        logger.info("=== LOGIN: Iniciando login para email: {} ===", requestDTO.getEmail());
-
         HttpGlobalResponse<JwtDTO> response = new HttpGlobalResponse<>();
         Optional<User> userFound = userAuthRepository.findByEmail(requestDTO.getEmail());
 
         if (userFound.isEmpty()) {
-            logger.warn("=== LOGIN: Usuario no encontrado: {} ===", requestDTO.getEmail());
             response.setMessage("Este usuario no se encuentra registrado");
             return response;
         }
@@ -186,12 +159,9 @@ public class AuthService {
         User user = userFound.get();
 
         if (!passwordEncoder.matches(requestDTO.getPassword(), user.getPassword())) {
-            logger.warn("=== LOGIN: Contraseña incorrecta para email: {} ===", requestDTO.getEmail());
             response.setMessage("Correo o contraseña son incorrectos");
             return response;
         }
-
-        logger.info("=== LOGIN: Credenciales válidas, generando token para usuario ID: {} ===", user.getId());
 
         JwtDTO jwtDTO = new JwtDTO();
         String jwt = jwtService.generateToken(user.getId(), user.getRol().name(), user.getEmail());
@@ -199,15 +169,8 @@ public class AuthService {
         response.setMessage("Inicio de sesion exitoso");
         response.setData(jwtDTO);
 
-        logger.info("=== LOGIN: Verificando notificacionClient para login, es null? {} ===",
-                notificacionClient == null);
-
         if (notificacionClient != null) {
-            logger.info("=== LOGIN: Llamando a enviarNotificacionLogin ===");
             enviarNotificacionLogin(user);
-            logger.info("=== LOGIN: enviarNotificacionLogin finalizado ===");
-        } else {
-            logger.error("=== LOGIN ERROR: notificacionClient es NULL ===");
         }
 
         return response;
@@ -220,8 +183,6 @@ public class AuthService {
      */
     private void enviarNotificacionLogin(User user) {
         try {
-            logger.info(">>> Enviando notificación de login para usuario: {}", user.getEmail());
-
             EnvioEventoNotificacionDTO eventoDTO = new EnvioEventoNotificacionDTO();
             eventoDTO.setUsuarioId(user.getId());
             eventoDTO.setEvento(EnumEventoAsociado.LOGIN_USUARIO);
@@ -229,15 +190,9 @@ public class AuthService {
                     "username", user.getUsername(),
                     "email", user.getEmail()));
 
-            logger.info(">>> Llamando a notificacionClient.enviarPorEvento para login");
-
-            Map<String, Object> respuesta = notificacionClient.enviarPorEvento(eventoDTO);
-            logger.info(">>> Respuesta de notificacionClient login: {}", respuesta);
-
-            logger.info(">>> Notificación de login enviada exitosamente para usuario: {}", user.getEmail());
+            notificacionClient.enviarPorEvento(eventoDTO);
         } catch (Exception e) {
-            logger.error(">>> Error al enviar notificación de login para usuario {}: {}", user.getEmail(),
-                    e.getMessage(), e);
+            // Se omite el registro para evitar logs en el servicio.
         }
     }
 
@@ -249,7 +204,6 @@ public class AuthService {
      * @throws Exception Si el token es inválido o está expirado
      */
     public JwtDTO refreshToken(String token) throws Exception {
-        logger.info("=== REFRESH: Refrescando token ===");
         JwtDTO responseDTO = new JwtDTO();
         String jwt = jwtService.refreshToken(token);
         responseDTO.setJwt(jwt);
@@ -265,22 +219,17 @@ public class AuthService {
      */
     @Transactional
     public MessegeGlobalDTO forgotPassword(ContrasenaOlvidada requestDTO) {
-        logger.info("=== FORGOT PASSWORD: Solicitud para username: {} ===", requestDTO.getUsername());
-
         Optional<User> userOpt = userAuthRepository.findByUsername(requestDTO.getUsername());
 
         if (userOpt.isEmpty()) {
-            logger.warn("=== FORGOT PASSWORD: Username no encontrado: {} ===", requestDTO.getUsername());
             return new MessegeGlobalDTO("Si el username existe, recibirás un email con instrucciones");
         }
 
         User user = userOpt.get();
-        logger.info("=== FORGOT PASSWORD: Usuario encontrado con ID: {} ===", user.getId());
 
         tokenRepository.deleteByUserId(user.getId());
 
         String token = generateOTP();
-        logger.info("=== FORGOT PASSWORD: Token OTP generado: {} ===", token);
 
         PasswordResetToken resetToken = new PasswordResetToken();
         resetToken.setToken(token);
@@ -289,10 +238,8 @@ public class AuthService {
         resetToken.setUsed(false);
 
         tokenRepository.save(resetToken);
-        logger.info("=== FORGOT PASSWORD: Token guardado en BD ===");
 
         emailService.sendPasswordResetEmailSimple(user.getEmail(), user.getUsername(), token);
-        logger.info("=== FORGOT PASSWORD: Email enviado a: {} ===", user.getEmail());
 
         return new MessegeGlobalDTO("Si el username existe, recibirás un email con instrucciones");
     }
@@ -305,38 +252,30 @@ public class AuthService {
      */
     @Transactional
     public MessegeGlobalDTO resetPassword(RestablecerContrasena requestDTO) {
-        logger.info("=== RESET PASSWORD: Iniciando restablecimiento ===");
-
         if (!requestDTO.getNewPassword().equals(requestDTO.getConfirmPassword())) {
-            logger.warn("=== RESET PASSWORD: Las contraseñas no coinciden ===");
             return new MessegeGlobalDTO("Las contraseñas no coinciden");
         }
 
         Optional<PasswordResetToken> tokenOpt = tokenRepository.findByToken(requestDTO.getToken());
 
         if (tokenOpt.isEmpty()) {
-            logger.warn("=== RESET PASSWORD: Token no encontrado: {} ===", requestDTO.getToken());
             return new MessegeGlobalDTO("Token inválido o expirado");
         }
 
         PasswordResetToken resetToken = tokenOpt.get();
 
         if (resetToken.isUsed()) {
-            logger.warn("=== RESET PASSWORD: Token ya utilizado ===");
             return new MessegeGlobalDTO("Este token ya ha sido utilizado");
         }
 
         if (resetToken.isExpired()) {
-            logger.warn("=== RESET PASSWORD: Token expirado ===");
             return new MessegeGlobalDTO("El token ha expirado");
         }
 
         User user = resetToken.getUser();
-        logger.info("=== RESET PASSWORD: Token válido para usuario ID: {} ===", user.getId());
 
         user.setPassword(passwordEncoder.encode(requestDTO.getNewPassword()));
         userAuthRepository.save(user);
-        logger.info("=== RESET PASSWORD: Contraseña actualizada ===");
 
         resetToken.setUsed(true);
         tokenRepository.save(resetToken);
@@ -353,18 +292,14 @@ public class AuthService {
      */
     @Transactional
     public HttpGlobalResponse<JwtDTO> loginBiometrico(String biometricToken) {
-        logger.info("[HUELLA] Inicio de autenticación biométrica");
-
         HttpGlobalResponse<JwtDTO> response = new HttpGlobalResponse<>();
 
         if (!biometricJwtService.validateToken(biometricToken)) {
-            logger.warn("[HUELLA] Token biométrico inválido");
             response.setMessage("Huella no reconocida. Intente de nuevo o use otro método.");
             return response;
         }
 
         if (biometricJwtService.isTokenExpired(biometricToken)) {
-            logger.warn("[HUELLA] Token biométrico expirado");
             response.setMessage("Huella no reconocida. Intente de nuevo o use otro método.");
             return response;
         }
@@ -373,47 +308,37 @@ public class AuthService {
         String deviceId = biometricJwtService.extractDeviceId(biometricToken);
 
         if (userId == null || deviceId == null) {
-            logger.warn("[HUELLA] Token biométrico incompleto - userId: {}, deviceId: {}", userId, deviceId);
             response.setMessage("Huella no reconocida. Intente de nuevo o use otro método.");
             return response;
         }
-
-        logger.info("[HUELLA] Token válido para userId: {}, deviceId: {}", userId, deviceId);
 
         UsuarioPerfilResponseDTO usuarioPerfil;
         try {
             usuarioPerfil = usuarioClient.obtenerUsuarioPorIdInterno(userId);
         } catch (Exception e) {
-            logger.error("[HUELLA] Error al consultar usuario en pg-ms-users: {}", e.getMessage());
             response.setMessage("Error interno al validar la huella");
             return response;
         }
 
         if (usuarioPerfil == null) {
-            logger.warn("[HUELLA] Usuario no encontrado: {}", userId);
             response.setMessage("Huella no reconocida. Intente de nuevo o use otro método.");
             return response;
         }
 
         if (usuarioPerfil.getEstado() == null ||
                 !usuarioPerfil.getEstado().name().equalsIgnoreCase("ACTIVO")) {
-            logger.warn("[HUELLA] Usuario inactivo: {}", userId);
             response.setMessage("Usuario inactivo. Contacte con administración.");
             return response;
         }
 
         String hashGuardado = usuarioPerfil.getBiometricDeviceId();
         if (hashGuardado == null || hashGuardado.trim().isEmpty()) {
-            logger.warn("[HUELLA] Usuario sin huella registrada: {}", userId);
             response.setMessage("Huella no reconocida. Intente de nuevo o use otro método.");
             return response;
         }
 
         String hashDeviceIdToken = biometricJwtService.generateHash(deviceId);
         if (hashDeviceIdToken == null || !hashDeviceIdToken.equals(hashGuardado)) {
-            logger.warn("[HUELLA] Hash no coincide para usuario: {}. Hash esperado: {}, hash recibido: {}",
-                    userId, hashGuardado.substring(0, 10) + "...",
-                    hashDeviceIdToken != null ? hashDeviceIdToken.substring(0, 10) + "..." : "null");
             response.setMessage("Huella no reconocida. Intente de nuevo o use otro método.");
             return response;
         }
@@ -427,8 +352,6 @@ public class AuthService {
         jwtDTO.setJwt(jwt);
         response.setMessage("Autenticación biométrica exitosa");
         response.setData(jwtDTO);
-
-        logger.info("[HUELLA] Autenticación biométrica exitosa para usuario: {}", userId);
 
         return response;
     }
@@ -445,27 +368,22 @@ public class AuthService {
      */
     @Transactional
     public MessegeGlobalDTO changePassword(Long userId, ChangePasswordRequestDTO requestDTO) {
-        logger.info("[PASSWORD] Inicio de cambio de contraseña para usuario ID: {}", userId);
-
         // 1. Buscar usuario
         User user = userAuthRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
         // 2. Validar contraseña actual
         if (!passwordEncoder.matches(requestDTO.getCurrentPassword(), user.getPassword())) {
-            logger.warn("[PASSWORD] Contraseña actual incorrecta para usuario ID: {}", userId);
             throw new RuntimeException("La contraseña actual es incorrecta");
         }
 
         // 3. Validar que nueva contraseña coincida con confirmación
         if (!requestDTO.getNewPassword().equals(requestDTO.getConfirmPassword())) {
-            logger.warn("[PASSWORD] Las contraseñas no coinciden para usuario ID: {}", userId);
             throw new RuntimeException("La nueva contraseña y la confirmación no coinciden");
         }
 
         // 4. Validar que la nueva contraseña no sea igual a la actual
         if (passwordEncoder.matches(requestDTO.getNewPassword(), user.getPassword())) {
-            logger.warn("[PASSWORD] La nueva contraseña es igual a la actual para usuario ID: {}", userId);
             throw new RuntimeException("La nueva contraseña no puede ser igual a la actual");
         }
 
@@ -476,9 +394,41 @@ public class AuthService {
         user.setPassword(encodedPassword);
         userAuthRepository.save(user);
 
-        // 7. Log estructurado
-        logger.info("[PASSWORD] Contraseña actualizada exitosamente para usuario ID: {}", userId);
-
         return new MessegeGlobalDTO("Contraseña actualizada exitosamente");
+    }
+
+    /**
+     * Obtiene todos los usuarios del sistema.
+     * 
+     * @param rol (opcional) Filtra por rol si se proporciona
+     * @return Lista de usuarios autenticados
+     */
+    public List<AuthUserDTO> obtenerUsuarios(String rol) {
+        ValidacionDeRoles.validarAdmin(rol);
+
+        List<User> usuarios = userAuthRepository.findAll();
+
+        return usuarios.stream().map(user -> {
+            AuthUserDTO dto = new AuthUserDTO();
+            dto.setId(user.getId());
+            dto.setEmail(user.getEmail());
+            dto.setUsername(user.getUsername());
+            dto.setRol(user.getRol());
+            dto.setEstado(user.getEstado());
+            return dto;
+        }).toList();
+    }
+
+    public MessegeGlobalDTO cambiarEstadoUsuario(Long id, String rol) {
+        ValidacionDeRoles.validarAdmin(rol);
+
+        User user = userAuthRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+
+        boolean nuevoEstado = !Boolean.TRUE.equals(user.getEstado());
+        user.setEstado(nuevoEstado);
+        userAuthRepository.save(user);
+
+        return new MessegeGlobalDTO("Estado del usuario actualizado exitosamente");
     }
 }

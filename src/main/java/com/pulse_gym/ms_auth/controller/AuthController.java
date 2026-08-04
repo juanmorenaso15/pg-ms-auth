@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.pulse_gym.lb_common.dto.MessegeGlobalDTO;
@@ -294,5 +295,33 @@ public class AuthController {
                     .body(new MessegeGlobalDTO("Error al cambiar el estado del usuario"));
         }
     }
-    
+
+    /**
+     * Endpoint interno para validar el rol de un usuario por email
+     * Usado por otros microservicios para verificar si un usuario es ENTRENADOR,
+     * SOCIO, etc.
+     * 
+     * @param email Email del usuario a validar
+     * @return AuthUserDTO con la información del usuario incluyendo su rol
+     */
+    @GetMapping("/api/internal/users/validate-rol")
+    public ResponseEntity<AuthUserDTO> validarRolPorEmail(@RequestParam String email) {
+        try {
+            User user = userAuthRepository.findByEmail(email)
+                    .orElseThrow(() -> new RuntimeException("Usuario no encontrado con email: " + email));
+
+            AuthUserDTO dto = new AuthUserDTO();
+            dto.setId(user.getId());
+            dto.setEmail(user.getEmail());
+            dto.setUsername(user.getUsername());
+            dto.setRol(user.getRol());
+            dto.setEstado(user.getEstado());
+
+
+            return ResponseEntity.ok(dto);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(null);
+        }
+    }
+
 }

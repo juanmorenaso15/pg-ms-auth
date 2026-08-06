@@ -3,6 +3,10 @@ package com.pulse_gym.ms_auth.controller;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -12,9 +16,11 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.pulse_gym.lb_common.dto.MessegeGlobalDTO;
+import com.pulse_gym.lb_common.dto.RespuestaPaginadaDTO;
 import com.pulse_gym.lb_common.dto.RestablecerContrasena;
 import com.pulse_gym.lb_common.dto.SolicitudTokenBiometricoDTO;
 import com.pulse_gym.lb_common.entity.auth.User;
@@ -266,12 +272,34 @@ public class AuthController {
         }
     }
 
+    /**
+     * Obtiene todos los usuarios con filtros opcionales y paginación.
+     * GET /auth/usuarios
+     * 
+     * @param rolHeader // Rol del usuario que hace la solicitud (para validar permisos)
+     * @param activo    // Filtro por estado activo/inactivo (opcional)
+     * @param rol   // Filtro por rol del usuario (opcional)
+     * @param pagina    // Número de página (0-indexado)
+     * @param tamanio  // Tamaño de página
+     * @param ordenarPor // Campo por el cual ordenar
+     * @param direccion // Dirección de ordenamiento (asc/desc)
+     * @return Respuesta paginada con usuarios filtrados
+     */
     @GetMapping("/usuarios")
-    public ResponseEntity<List<AuthUserDTO>> obtenerTodosLosUsuarios(
-            @RequestHeader(value = "X-User-Rol", required = false) String rol) {
+    public ResponseEntity<RespuestaPaginadaDTO<AuthUserDTO>> obtenerTodosLosUsuarios(
+            @RequestHeader(value = "X-User-Rol", required = false) String rolHeader,
+            @RequestParam(required = false) Boolean activo,
+            @RequestParam(required = false) String rol,
+            @RequestParam(defaultValue = "0") int pagina,
+            @RequestParam(defaultValue = "10") int tamanio,
+            @RequestParam(defaultValue = "id") String ordenarPor,
+            @RequestParam(defaultValue = "asc") String direccion) {
         try {
-            List<AuthUserDTO> usuarios = authService.obtenerUsuarios(rol);
-            return ResponseEntity.status(HttpStatus.OK).body(usuarios);
+            Pageable pageable = PageRequest.of(pagina, tamanio,
+                    Sort.by(Sort.Direction.fromString(direccion), ordenarPor));
+            RespuestaPaginadaDTO<AuthUserDTO> respuesta = authService.obtenerUsuariosConFiltros(rolHeader, activo, rol,
+                    pageable);
+            return ResponseEntity.ok(respuesta);
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
@@ -294,5 +322,5 @@ public class AuthController {
                     .body(new MessegeGlobalDTO("Error al cambiar el estado del usuario"));
         }
     }
-    
+
 }

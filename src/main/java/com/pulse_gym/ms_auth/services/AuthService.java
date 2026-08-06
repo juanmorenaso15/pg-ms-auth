@@ -1,5 +1,6 @@
 package com.pulse_gym.ms_auth.services;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -73,6 +74,12 @@ public class AuthService {
      * Cliente para interactuar con el microservicio de usuarios (pg-ms-users)
      */
     private final UsuarioClient usuarioClient;
+
+    /** Valores constantes para la gestión de intentos fallidos */
+    private static final int MAX_ATTEMPTS = 3;
+
+    /** Duración del bloqueo en segundos */
+    private static final int LOCK_DURATION_SECONDS = 30;
 
     /** Tiempo de expiración del token de restablecimiento en minutos */
     @Value("${app.security.reset-token-expiration-minutes:10}")
@@ -155,6 +162,7 @@ public class AuthService {
      */
     public HttpGlobalResponse<JwtDTO> login(LoginRequestDTO requestDTO) {
         HttpGlobalResponse<JwtDTO> response = new HttpGlobalResponse<>();
+
         Optional<User> userFound = userAuthRepository.findByEmail(requestDTO.getEmail());
 
         if (userFound.isEmpty()) {
@@ -164,15 +172,38 @@ public class AuthService {
 
         User user = userFound.get();
 
-        if (!passwordEncoder.matches(requestDTO.getPassword(), user.getPassword())) {
-            response.setMessage("Correo o contraseña son incorrectos");
+        if (user.isLocked()) {
+            long secondsRemaining = Duration.between(
+                    LocalDateTime.now(),
+                    user.getLockTime().plusSeconds(LOCK_DURATION_SECONDS)).getSeconds();
+
+            response.setMessage(
+                    "Demasiados intentos fallidos. Cuenta bloqueada por " + secondsRemaining + " segundos.");
             return response;
         }
+
+        if (!passwordEncoder.matches(requestDTO.getPassword(), user.getPassword())) {
+            user.incrementFailedAttempts();
+            userAuthRepository.save(user);
+
+            int remainingAttempts = MAX_ATTEMPTS - (user.getFailedAttempts() == null ? 0 : user.getFailedAttempts());
+
+            if (remainingAttempts <= 0) {
+                response.setMessage(
+                        "Demasiados intentos fallidos. Cuenta bloqueada por " + LOCK_DURATION_SECONDS + " segundos.");
+            } else {
+                response.setMessage("Credenciales incorrectas. Te quedan " + remainingAttempts + " intentos.");
+            }
+            return response;
+        }
+
+        user.resetFailedAttempts();
+        userAuthRepository.save(user);
 
         JwtDTO jwtDTO = new JwtDTO();
         String jwt = jwtService.generateToken(user.getId(), user.getRol().name(), user.getEmail());
         jwtDTO.setJwt(jwt);
-        response.setMessage("Inicio de sesion exitoso");
+        response.setMessage("Inicio de sesión exitoso");
         response.setData(jwtDTO);
 
         if (notificacionClient != null) {
@@ -405,10 +436,12 @@ public class AuthService {
 
     /**
      * Obtiene usuarios con paginación y filtros opcionales.
+     * 
      * @param rolHeader rol del usuario que hace la petición (para validar admin)
-     * @param activo filtro por estado (true=activo, false=inactivo, null=sin filtro)
-     * @param rol filtro por rol (nombre del rol, null=sin filtro)
-     * @param pageable objeto de paginación
+     * @param activo    filtro por estado (true=activo, false=inactivo, null=sin
+     *                  filtro)
+     * @param rol       filtro por rol (nombre del rol, null=sin filtro)
+     * @param pageable  objeto de paginación
      * @return respuesta paginada con AuthUserDTO
      */
     public RespuestaPaginadaDTO<AuthUserDTO> obtenerUsuariosConFiltros(String rolHeader, Boolean activo, String rol,

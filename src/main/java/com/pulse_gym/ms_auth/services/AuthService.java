@@ -4,8 +4,12 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,6 +24,7 @@ import com.pulse_gym.lb_common.dto.EnvioEventoNotificacionDTO;
 import com.pulse_gym.lb_common.dto.HttpGlobalResponse;
 import com.pulse_gym.lb_common.dto.JwtDTO;
 import com.pulse_gym.lb_common.dto.MessegeGlobalDTO;
+import com.pulse_gym.lb_common.dto.RespuestaPaginadaDTO;
 import com.pulse_gym.lb_common.dto.RestablecerContrasena;
 import com.pulse_gym.lb_common.dto.UsuarioPerfilResponseDTO;
 import com.pulse_gym.lb_common.entity.auth.PasswordResetToken;
@@ -32,6 +37,7 @@ import com.pulse_gym.ms_auth.dto.LoginRequestDTO;
 import com.pulse_gym.ms_auth.dto.RegisterRequestDTO;
 import com.pulse_gym.ms_auth.repository.PasswordResetTokenRepository;
 import com.pulse_gym.ms_auth.repository.UserAuthRepository;
+import com.pulse_gym.ms_auth.specifications.EspecificacionesUsuario;
 
 import lombok.RequiredArgsConstructor;
 
@@ -398,25 +404,48 @@ public class AuthService {
     }
 
     /**
-     * Obtiene todos los usuarios del sistema.
-     * 
-     * @param rol (opcional) Filtra por rol si se proporciona
-     * @return Lista de usuarios autenticados
+     * Obtiene usuarios con paginación y filtros opcionales.
+     * @param rolHeader rol del usuario que hace la petición (para validar admin)
+     * @param activo filtro por estado (true=activo, false=inactivo, null=sin filtro)
+     * @param rol filtro por rol (nombre del rol, null=sin filtro)
+     * @param pageable objeto de paginación
+     * @return respuesta paginada con AuthUserDTO
      */
-    public List<AuthUserDTO> obtenerUsuarios(String rol) {
-        ValidacionDeRoles.validarAdmin(rol);
+    public RespuestaPaginadaDTO<AuthUserDTO> obtenerUsuariosConFiltros(String rolHeader, Boolean activo, String rol,
+            Pageable pageable) {
+        ValidacionDeRoles.validarAdmin(rolHeader);
 
-        List<User> usuarios = userAuthRepository.findAll();
+        Specification<User> especificacion = Specification.where(null);
+        if (activo != null) {
+            especificacion = especificacion.and(EspecificacionesUsuario.tieneEstado(activo));
+        }
+        if (rol != null && !rol.isBlank()) {
+            especificacion = especificacion.and(EspecificacionesUsuario.tieneRol(rol));
+        }
 
-        return usuarios.stream().map(user -> {
-            AuthUserDTO dto = new AuthUserDTO();
-            dto.setId(user.getId());
-            dto.setEmail(user.getEmail());
-            dto.setUsername(user.getUsername());
-            dto.setRol(user.getRol());
-            dto.setEstado(user.getEstado());
-            return dto;
-        }).toList();
+        Page<User> paginaUsuarios = userAuthRepository.findAll(especificacion, pageable);
+
+        List<AuthUserDTO> contenido = paginaUsuarios.getContent().stream()
+                .map(this::convertirADTO)
+                .collect(Collectors.toList());
+
+        return new RespuestaPaginadaDTO<>(
+                contenido,
+                paginaUsuarios.getNumber(),
+                paginaUsuarios.getSize(),
+                paginaUsuarios.getTotalElements(),
+                paginaUsuarios.getTotalPages(),
+                paginaUsuarios.isLast());
+    }
+
+    private AuthUserDTO convertirADTO(User user) {
+        AuthUserDTO dto = new AuthUserDTO();
+        dto.setId(user.getId());
+        dto.setEmail(user.getEmail());
+        dto.setUsername(user.getUsername());
+        dto.setRol(user.getRol());
+        dto.setEstado(user.getEstado());
+        return dto;
     }
 
     public MessegeGlobalDTO cambiarEstadoUsuario(Long id, String rol) {

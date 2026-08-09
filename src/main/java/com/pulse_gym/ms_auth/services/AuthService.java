@@ -35,7 +35,6 @@ import com.pulse_gym.lb_common.dto.UsuarioPerfilResponseDTO;
 import com.pulse_gym.lb_common.entity.auth.PasswordResetToken;
 import com.pulse_gym.lb_common.entity.auth.User;
 import com.pulse_gym.lb_common.enums.EnumEventoAsociado;
-import com.pulse_gym.lb_common.enums.EnumRol;
 import com.pulse_gym.lb_common.services.BiometricJwtService;
 import com.pulse_gym.lb_common.services.JwtService;
 import com.pulse_gym.lb_common.services.ValidacionDeRoles;
@@ -70,9 +69,6 @@ public class AuthService {
 
     /** Cliente Feign para comunicación con el microservicio de notificaciones */
     private final NotificacionClient notificacionClient;
-
-    /** Cliente para interactuar con el servicio de autenticación */
-    private final AuthServiceClient authServiceClient;
 
     /** Servicio para generación y validación de tokens biométricos */
     private final BiometricJwtService biometricJwtService;

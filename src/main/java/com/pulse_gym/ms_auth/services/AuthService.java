@@ -7,7 +7,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.CacheManager;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -32,6 +35,7 @@ import com.pulse_gym.lb_common.dto.UsuarioPerfilResponseDTO;
 import com.pulse_gym.lb_common.entity.auth.PasswordResetToken;
 import com.pulse_gym.lb_common.entity.auth.User;
 import com.pulse_gym.lb_common.enums.EnumEventoAsociado;
+import com.pulse_gym.lb_common.enums.EnumRol;
 import com.pulse_gym.lb_common.services.BiometricJwtService;
 import com.pulse_gym.lb_common.services.JwtService;
 import com.pulse_gym.lb_common.services.ValidacionDeRoles;
@@ -42,9 +46,11 @@ import com.pulse_gym.ms_auth.repository.UserAuthRepository;
 import com.pulse_gym.ms_auth.specifications.EspecificacionesUsuario;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AuthService {
 
     /** Repositorio para operaciones CRUD de usuarios de autenticación */
@@ -75,6 +81,9 @@ public class AuthService {
      * Cliente para interactuar con el microservicio de usuarios (pg-ms-users)
      */
     private final UsuarioClient usuarioClient;
+
+    @Autowired
+    private CacheManager cacheManager;
 
     /** Valores constantes para la gestión de intentos fallidos */
     private static final int MAX_ATTEMPTS = 3;
@@ -161,23 +170,27 @@ public class AuthService {
      * @param requestDTO Credenciales de login (email, password)
      * @return Respuesta con token JWT y mensaje de éxito o error
      */
+    @Transactional
     public HttpGlobalResponse<JwtDTO> login(LoginRequestDTO requestDTO) {
         HttpGlobalResponse<JwtDTO> response = new HttpGlobalResponse<>();
 
-        Optional<User> userFound = userAuthRepository.findByEmail(requestDTO.getEmail());
-
-        if (userFound.isEmpty()) {
+        Optional<User> userOpt = findUserByEmail(requestDTO.getEmail());
+        if (userOpt.isEmpty()) {
             response.setMessage("Este usuario no se encuentra registrado");
             return response;
         }
 
-        User user = userFound.get();
+        User user = userOpt.get();
+
+        if (!Boolean.TRUE.equals(user.getEstado())) {
+            response.setMessage("Usuario inactivo. Contacte con administración.");
+            return response;
+        }
 
         if (user.isLocked()) {
             long secondsRemaining = Duration.between(
                     LocalDateTime.now(),
                     user.getLockTime().plusSeconds(LOCK_DURATION_SECONDS)).getSeconds();
-
             response.setMessage(
                     "Demasiados intentos fallidos. Cuenta bloqueada por " + secondsRemaining + " segundos.");
             return response;
@@ -186,9 +199,9 @@ public class AuthService {
         if (!passwordEncoder.matches(requestDTO.getPassword(), user.getPassword())) {
             user.incrementFailedAttempts();
             userAuthRepository.save(user);
+            cacheManager.getCache("users").evict(requestDTO.getEmail());
 
             int remainingAttempts = MAX_ATTEMPTS - (user.getFailedAttempts() == null ? 0 : user.getFailedAttempts());
-
             if (remainingAttempts <= 0) {
                 response.setMessage(
                         "Demasiados intentos fallidos. Cuenta bloqueada por " + LOCK_DURATION_SECONDS + " segundos.");
@@ -200,6 +213,7 @@ public class AuthService {
 
         user.resetFailedAttempts();
         userAuthRepository.save(user);
+        cacheManager.getCache("users").evict(requestDTO.getEmail());
 
         JwtDTO jwtDTO = new JwtDTO();
         String jwt = jwtService.generateToken(user.getId(), user.getRol().name(), user.getEmail());
@@ -208,29 +222,10 @@ public class AuthService {
         response.setData(jwtDTO);
 
         if (notificacionClient != null) {
-            enviarNotificacionLoginAsync(user); 
+            enviarNotificacionLoginAsync(user);
         }
+
         return response;
-    }
-
-    /**
-     * Envía notificación de inicio de sesión al microservicio de notificaciones.
-     *
-     * @param user Usuario que inició sesión
-     */
-    private void enviarNotificacionLogin(User user) {
-        try {
-            EnvioEventoNotificacionDTO eventoDTO = new EnvioEventoNotificacionDTO();
-            eventoDTO.setUsuarioId(user.getId());
-            eventoDTO.setEvento(EnumEventoAsociado.LOGIN_USUARIO);
-            eventoDTO.setVariablesAdicionales(Map.of(
-                    "username", user.getUsername(),
-                    "email", user.getEmail()));
-
-            notificacionClient.enviarPorEvento(eventoDTO);
-        } catch (Exception e) {
-            // Se omite el registro para evitar logs en el servicio.
-        }
     }
 
     /**
@@ -471,6 +466,12 @@ public class AuthService {
                 paginaUsuarios.isLast());
     }
 
+    /**
+     * Convierte un objeto User a AuthUserDTO.
+     * 
+     * @param user objeto User
+     * @return objeto AuthUserDTO
+     */
     private AuthUserDTO convertirADTO(User user) {
         AuthUserDTO dto = new AuthUserDTO();
         dto.setId(user.getId());
@@ -481,6 +482,14 @@ public class AuthService {
         return dto;
     }
 
+    /**
+     * Cambia el estado de un usuario (activo/inactivo).
+     * Valida que el usuario que hace la petición sea admin.
+     * 
+     * @param id  ID del usuario a cambiar
+     * @param rol rol del usuario que hace la petición (para validar admin)
+     * @return mensaje de éxito
+     */
     public MessegeGlobalDTO cambiarEstadoUsuario(Long id, String rol) {
         ValidacionDeRoles.validarAdmin(rol);
 
@@ -494,6 +503,13 @@ public class AuthService {
         return new MessegeGlobalDTO("Estado del usuario actualizado exitosamente");
     }
 
+    /**
+     * Obtiene un usuario por su email, utilizando caché para mejorar el
+     * rendimiento.
+     *
+     * @param email El email del usuario
+     * @return Optional con el usuario si existe, o vacío si no se encuentra
+     */
     @Async
     public void enviarNotificacionLoginAsync(User user) {
         try {
@@ -505,5 +521,17 @@ public class AuthService {
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+    /**
+     * Obtiene un usuario por su email, utilizando caché para mejorar el
+     * rendimiento.
+     * 
+     * @param email
+     * @return
+     */
+    @Cacheable(value = "users", key = "#email")
+    public Optional<User> findUserByEmail(String email) {
+        return userAuthRepository.findByEmail(email);
     }
 }

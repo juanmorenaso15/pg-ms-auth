@@ -1,0 +1,15 @@
+spring:
+  datasource:
+    url: ${LOCAL_URL_AUTH}  # o localhost si ejecutas fuera de Docker
+    username: ${LOCAL_USER}
+    password: ${LOCAL_PASSWORD}
+    hikari:
+      maximum-pool-size: 30
+      minimum-idle: 10
+      connection-timeout: 30000
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+
+# Las demás configuraciones (JWT, etc.) se heredan del application.yml

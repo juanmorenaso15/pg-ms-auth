@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -207,9 +208,8 @@ public class AuthService {
         response.setData(jwtDTO);
 
         if (notificacionClient != null) {
-            enviarNotificacionLogin(user);
+            enviarNotificacionLoginAsync(user); 
         }
-
         return response;
     }
 
@@ -492,5 +492,18 @@ public class AuthService {
         userAuthRepository.save(user);
 
         return new MessegeGlobalDTO("Estado del usuario actualizado exitosamente");
+    }
+
+    @Async
+    public void enviarNotificacionLoginAsync(User user) {
+        try {
+            EnvioEventoNotificacionDTO eventoDTO = new EnvioEventoNotificacionDTO();
+            eventoDTO.setUsuarioId(user.getId());
+            eventoDTO.setEvento(EnumEventoAsociado.LOGIN_USUARIO);
+            eventoDTO.setVariablesAdicionales(Map.of("username", user.getUsername(), "email", user.getEmail()));
+            notificacionClient.enviarPorEvento(eventoDTO);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 }

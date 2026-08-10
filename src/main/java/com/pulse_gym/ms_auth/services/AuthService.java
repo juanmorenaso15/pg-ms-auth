@@ -483,10 +483,11 @@ public class AuthService {
     }
 
     /**
-     * Cambia el estado de un usuario (activo/inactivo) y sincroniza con el perfil del usuario.
+     * Cambia el estado de un usuario (activo/inactivo) y sincroniza con el perfil
+     * del usuario.
      * 
-     * @param id   ID del usuario a cambiar
-     * @param rol  rol del usuario que hace la petición (para validar admin)
+     * @param id  ID del usuario a cambiar
+     * @param rol rol del usuario que hace la petición (para validar admin)
      * @return mensaje de éxito o error
      */
     @Transactional
@@ -502,12 +503,17 @@ public class AuthService {
 
         EnumEstadoUsuario estadoEnum = nuevoEstadoBool ? EnumEstadoUsuario.ACTIVO : EnumEstadoUsuario.INACTIVO;
 
+        boolean perfilActualizado = false;
         try {
             usuarioClient.cambiarEstadoInternoPorEmail(user.getEmail(), estadoEnum);
+            perfilActualizado = true;
         } catch (Exception e) {
-            throw new RuntimeException("No se pudo actualizar el estado en el perfil del usuario: " + e.getMessage());
         }
 
-        return new MessegeGlobalDTO("Estado del usuario actualizado exitosamente en autenticación y perfil");
+        String mensaje = perfilActualizado
+                ? "Estado del usuario actualizado exitosamente en autenticación y perfil"
+                : "Estado del usuario actualizado exitosamente en autenticación (perfil no encontrado)";
+
+        return new MessegeGlobalDTO(mensaje);
     }
 }

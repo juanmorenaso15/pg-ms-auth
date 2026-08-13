@@ -34,6 +34,7 @@ import com.pulse_gym.lb_common.dto.RestablecerContrasena;
 import com.pulse_gym.lb_common.dto.UsuarioPerfilResponseDTO;
 import com.pulse_gym.lb_common.entity.auth.PasswordResetToken;
 import com.pulse_gym.lb_common.entity.auth.User;
+import com.pulse_gym.lb_common.enums.EnumEstadoUsuario;
 import com.pulse_gym.lb_common.enums.EnumEventoAsociado;
 import com.pulse_gym.lb_common.services.BiometricJwtService;
 import com.pulse_gym.lb_common.services.JwtService;
@@ -499,11 +500,24 @@ public class AuthService {
         User user = userAuthRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
-        boolean nuevoEstado = !Boolean.TRUE.equals(user.getEstado());
-        user.setEstado(nuevoEstado);
+        boolean nuevoEstadoBool = !Boolean.TRUE.equals(user.getEstado());
+        user.setEstado(nuevoEstadoBool);
         userAuthRepository.save(user);
 
-        return new MessegeGlobalDTO("Estado del usuario actualizado exitosamente");
+        EnumEstadoUsuario estadoEnum = nuevoEstadoBool ? EnumEstadoUsuario.ACTIVO : EnumEstadoUsuario.INACTIVO;
+
+        boolean perfilActualizado = false;
+        try {
+            usuarioClient.cambiarEstadoInternoPorEmail(user.getEmail(), estadoEnum);
+            perfilActualizado = true;
+        } catch (Exception e) {
+        }
+
+        String mensaje = perfilActualizado
+                ? "Estado del usuario actualizado exitosamente en autenticación y perfil"
+                : "Estado del usuario actualizado exitosamente en autenticación (perfil no encontrado)";
+
+        return new MessegeGlobalDTO(mensaje);
     }
 
     /**

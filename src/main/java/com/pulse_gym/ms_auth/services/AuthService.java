@@ -112,12 +112,19 @@ public class AuthService {
      *         existe
      */
     public MessegeGlobalDTO register(RegisterRequestDTO requestDTO) {
-        if (userAuthRepository.findByEmail(requestDTO.getEmail()).isPresent()) {
-            return new MessegeGlobalDTO("El correo ya esta en uso");
-        }
+        List<Object[]> duplicates = userAuthRepository.checkDuplicates(requestDTO.getEmail(), requestDTO.getUsername()).orElse(List.of());
 
-        if (userAuthRepository.findByUsername(requestDTO.getUsername()).isPresent()) {
-            return new MessegeGlobalDTO("El nombre de usuario ya está en uso");
+        if (!duplicates.isEmpty()) {
+            for (Object[] data : duplicates) {
+                String email = (String) data[0];
+                String username = (String) data[1];
+                if (email != null && email.equals(requestDTO.getEmail())) {
+                    return new MessegeGlobalDTO("El correo ya está en uso");
+                }
+                if (username != null && username.equals(requestDTO.getUsername())) {
+                    return new MessegeGlobalDTO("El nombre de usuario ya está en uso");
+                }
+            }
         }
 
         User user = new User();
@@ -131,18 +138,19 @@ public class AuthService {
         userAuthRepository.save(user);
 
         if (notificacionClient != null) {
-            enviarNotificacionRegistro(user);
+            enviarNotificacionRegistroAsync(user);
         }
 
         return new MessegeGlobalDTO("Se ha registrado correctamente");
     }
 
     /**
-     * Envía notificación de registro al microservicio de notificaciones.
-     *
+     * Envía una notificación de registro de usuario de manera asíncrona.
+     * 
      * @param user Usuario recién registrado
      */
-    private void enviarNotificacionRegistro(User user) {
+    @Async
+    public void enviarNotificacionRegistroAsync(User user) {
         try {
             EnvioEventoNotificacionDTO eventoDTO = new EnvioEventoNotificacionDTO();
             eventoDTO.setUsuarioId(user.getId());
@@ -152,10 +160,9 @@ public class AuthService {
                     "email", user.getEmail(),
                     "nombre", user.getUsername(),
                     "fecha_registro", LocalDateTime.now().toString()));
-
             notificacionClient.enviarPorEvento(eventoDTO);
         } catch (Exception e) {
-            // Se omite el registro para evitar logs en el servicio.
+            log.error("Error enviando notificación de registro: {}", e.getMessage());
         }
     }
 

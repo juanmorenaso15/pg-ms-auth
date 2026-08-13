@@ -1,5 +1,6 @@
 package com.pulse_gym.ms_auth.repository;
 
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -28,5 +29,6 @@ public interface UserAuthRepository extends JpaRepository<User, Long>, JpaSpecif
      */
     Optional<User> findByUsername(String username);
 
-    
+    @Query("SELECT u.email, u.username FROM User u WHERE u.email = :email OR u.username = :username")
+    Optional<List<Object[]>> checkDuplicates(@Param("email") String email, @Param("username") String username);
 }

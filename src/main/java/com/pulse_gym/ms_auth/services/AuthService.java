@@ -113,7 +113,8 @@ public class AuthService {
      *         existe
      */
     public MessegeGlobalDTO register(RegisterRequestDTO requestDTO) {
-        List<Object[]> duplicates = userAuthRepository.checkDuplicates(requestDTO.getEmail(), requestDTO.getUsername()).orElse(List.of());
+        List<Object[]> duplicates = userAuthRepository.checkDuplicates(requestDTO.getEmail(), requestDTO.getUsername())
+                .orElse(List.of());
 
         if (!duplicates.isEmpty()) {
             for (Object[] data : duplicates) {
@@ -404,29 +405,23 @@ public class AuthService {
      */
     @Transactional
     public MessegeGlobalDTO changePassword(Long userId, ChangePasswordRequestDTO requestDTO) {
-        // 1. Buscar usuario
         User user = userAuthRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
-        // 2. Validar contraseña actual
         if (!passwordEncoder.matches(requestDTO.getCurrentPassword(), user.getPassword())) {
             throw new RuntimeException("La contraseña actual es incorrecta");
         }
 
-        // 3. Validar que nueva contraseña coincida con confirmación
         if (!requestDTO.getNewPassword().equals(requestDTO.getConfirmPassword())) {
             throw new RuntimeException("La nueva contraseña y la confirmación no coinciden");
         }
 
-        // 4. Validar que la nueva contraseña no sea igual a la actual
         if (passwordEncoder.matches(requestDTO.getNewPassword(), user.getPassword())) {
             throw new RuntimeException("La nueva contraseña no puede ser igual a la actual");
         }
 
-        // 5. Encriptar nueva contraseña con BCrypt
         String encodedPassword = passwordEncoder.encode(requestDTO.getNewPassword());
 
-        // 6. Actualizar en BD
         user.setPassword(encodedPassword);
         userAuthRepository.save(user);
 
@@ -444,6 +439,7 @@ public class AuthService {
      * @return respuesta paginada con AuthUserDTO
      */
     public RespuestaPaginadaDTO<AuthUserDTO> obtenerUsuariosConFiltros(String rolHeader, Boolean activo, String rol,
+            String username,
             Pageable pageable) {
         ValidacionDeRoles.validarAdmin(rolHeader);
 
@@ -453,6 +449,9 @@ public class AuthService {
         }
         if (rol != null && !rol.isBlank()) {
             especificacion = especificacion.and(EspecificacionesUsuario.tieneRol(rol));
+        }
+        if (username != null && !username.isBlank()) {
+            especificacion = especificacion.and(EspecificacionesUsuario.contieneUsername(username));
         }
 
         Page<User> paginaUsuarios = userAuthRepository.findAll(especificacion, pageable);

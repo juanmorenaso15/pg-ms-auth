@@ -290,6 +290,7 @@ public class AuthController {
             @RequestHeader(value = "X-User-Rol", required = false) String rolHeader,
             @RequestParam(required = false) Boolean activo,
             @RequestParam(required = false) String rol,
+            @RequestParam(required = false) String username,
             @RequestParam(defaultValue = "0") int pagina,
             @RequestParam(defaultValue = "10") int tamanio,
             @RequestParam(defaultValue = "id") String ordenarPor,
@@ -297,7 +298,7 @@ public class AuthController {
         try {
             Pageable pageable = PageRequest.of(pagina, tamanio,
                     Sort.by(Sort.Direction.fromString(direccion), ordenarPor));
-            RespuestaPaginadaDTO<AuthUserDTO> respuesta = authService.obtenerUsuariosConFiltros(rolHeader, activo, rol,
+            RespuestaPaginadaDTO<AuthUserDTO> respuesta = authService.obtenerUsuariosConFiltros(rolHeader, activo, rol, username,
                     pageable);
             return ResponseEntity.ok(respuesta);
         } catch (Exception e) {

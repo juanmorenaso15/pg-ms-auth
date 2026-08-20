@@ -24,9 +24,11 @@ import com.pulse_gym.lb_common.dto.RespuestaPaginadaDTO;
 import com.pulse_gym.lb_common.dto.RestablecerContrasena;
 import com.pulse_gym.lb_common.dto.SolicitudTokenBiometricoDTO;
 import com.pulse_gym.lb_common.entity.auth.User;
+import com.pulse_gym.lb_common.exception.SecurityAuthorizationException;
 import com.pulse_gym.lb_common.services.JwtService;
 import com.pulse_gym.lb_common.dto.AuthUserDTO;
 import com.pulse_gym.lb_common.dto.BiometricLoginRequestDTO;
+import com.pulse_gym.lb_common.dto.ChangePasswordByAdminRequestDTO;
 import com.pulse_gym.lb_common.dto.ChangePasswordRequestDTO;
 import com.pulse_gym.lb_common.dto.ContrasenaOlvidada;
 import com.pulse_gym.lb_common.dto.HttpGlobalResponse;
@@ -276,13 +278,14 @@ public class AuthController {
      * Obtiene todos los usuarios con filtros opcionales y paginación.
      * GET /auth/usuarios
      * 
-     * @param rolHeader // Rol del usuario que hace la solicitud (para validar permisos)
-     * @param activo    // Filtro por estado activo/inactivo (opcional)
-     * @param rol   // Filtro por rol del usuario (opcional)
-     * @param pagina    // Número de página (0-indexado)
-     * @param tamanio  // Tamaño de página
+     * @param rolHeader  // Rol del usuario que hace la solicitud (para validar
+     *                   permisos)
+     * @param activo     // Filtro por estado activo/inactivo (opcional)
+     * @param rol        // Filtro por rol del usuario (opcional)
+     * @param pagina     // Número de página (0-indexado)
+     * @param tamanio    // Tamaño de página
      * @param ordenarPor // Campo por el cual ordenar
-     * @param direccion // Dirección de ordenamiento (asc/desc)
+     * @param direccion  // Dirección de ordenamiento (asc/desc)
      * @return Respuesta paginada con usuarios filtrados
      */
     @GetMapping("/usuarios")
@@ -298,7 +301,8 @@ public class AuthController {
         try {
             Pageable pageable = PageRequest.of(pagina, tamanio,
                     Sort.by(Sort.Direction.fromString(direccion), ordenarPor));
-            RespuestaPaginadaDTO<AuthUserDTO> respuesta = authService.obtenerUsuariosConFiltros(rolHeader, activo, rol, username,
+            RespuestaPaginadaDTO<AuthUserDTO> respuesta = authService.obtenerUsuariosConFiltros(rolHeader, activo, rol,
+                    username,
                     pageable);
             return ResponseEntity.ok(respuesta);
         } catch (Exception e) {
@@ -345,10 +349,41 @@ public class AuthController {
             dto.setRol(user.getRol());
             dto.setEstado(user.getEstado());
 
-
             return ResponseEntity.ok(dto);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(null);
+        }
+    }
+
+    /**
+     * Cambia la contraseña de un usuario por parte de Admin, Recepcionista o
+     * Entrenador.
+     * No requiere la contraseña actual del usuario.
+     * 
+     * @param requestDTO DTO con email, nueva contraseña y confirmación
+     * @param userRol    Rol del usuario autenticado (desde header X-User-Rol)
+     * @return Mensaje de éxito o error
+     */
+    @PostMapping("/change-password-by-admin")
+    public ResponseEntity<MessegeGlobalDTO> changePasswordByAdmin(
+            @Valid @RequestBody ChangePasswordByAdminRequestDTO requestDTO,
+            @RequestHeader(value = "X-User-Rol", required = false) String userRol) {
+        try {
+            MessegeGlobalDTO response = authService.changePasswordByAdmin(
+                    requestDTO.getEmail(),
+                    requestDTO,
+                    userRol);
+            return ResponseEntity.status(HttpStatus.OK).body(response);
+        } catch (SecurityAuthorizationException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(new MessegeGlobalDTO(e.getMessage()));
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new MessegeGlobalDTO(e.getMessage()));
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new MessegeGlobalDTO("Error al cambiar la contraseña"));
         }
     }
 

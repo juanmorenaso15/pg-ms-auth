@@ -23,6 +23,7 @@ import com.pulse_gym.lb_common.client.AuthServiceClient;
 import com.pulse_gym.lb_common.client.NotificacionClient;
 import com.pulse_gym.lb_common.client.UsuarioClient;
 import com.pulse_gym.lb_common.dto.AuthUserDTO;
+import com.pulse_gym.lb_common.dto.ChangePasswordByAdminRequestDTO;
 import com.pulse_gym.lb_common.dto.ChangePasswordRequestDTO;
 import com.pulse_gym.lb_common.dto.ContrasenaOlvidada;
 import com.pulse_gym.lb_common.dto.EnvioEventoNotificacionDTO;
@@ -482,6 +483,7 @@ public class AuthService {
         dto.setUsername(user.getUsername());
         dto.setRol(user.getRol());
         dto.setEstado(user.getEstado());
+        dto.setFechaRegistro(user.getFechaRegistro());
         return dto;
     }
 
@@ -549,5 +551,65 @@ public class AuthService {
     @Cacheable(value = "users", key = "#email")
     public Optional<User> findUserByEmail(String email) {
         return userAuthRepository.findByEmail(email);
+    }
+
+    /**
+     * Cambia la contraseña de un usuario por parte de Admin, Recepcionista o
+     * Entrenador.
+     * No requiere contraseña actual, solo el email del usuario y la nueva
+     * contraseña.
+     * 
+     * @param email      Email del usuario a quien se le cambiará la contraseña
+     * @param requestDTO DTO con nueva contraseña y confirmación
+     * @param userRol    Rol del usuario autenticado (admin, recepcionista,
+     *                   entrenador)
+     * @return Mensaje de éxito o error
+     * @throws RuntimeException si alguna validación falla
+     */
+    @Transactional
+    public MessegeGlobalDTO changePasswordByAdmin(String email, ChangePasswordByAdminRequestDTO requestDTO,
+            String userRol) {
+
+        ValidacionDeRoles.validarAdminOEntrenadorORecepcionista(userRol);
+
+        if (!requestDTO.getNewPassword().equals(requestDTO.getConfirmPassword())) {
+            throw new RuntimeException("La nueva contraseña y la confirmación no coinciden");
+        }
+
+        if (requestDTO.getNewPassword().length() < 8) {
+            throw new RuntimeException("La nueva contraseña debe tener al menos 8 caracteres");
+        }
+
+        User user = userAuthRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado con email: " + email));
+
+        String encodedPassword = passwordEncoder.encode(requestDTO.getNewPassword());
+        user.setPassword(encodedPassword);
+        userAuthRepository.save(user);
+
+        enviarNotificacionCambioContrasenaAsync(user);
+
+        return new MessegeGlobalDTO("Contraseña actualizada exitosamente para el usuario: " + email);
+    }
+
+    /**
+     * Envía notificación de cambio de contraseña de manera asíncrona.
+     * 
+     * @param user Usuario al que se le cambió la contraseña
+     */
+    @Async
+    public void enviarNotificacionCambioContrasenaAsync(User user) {
+        try {
+            EnvioEventoNotificacionDTO eventoDTO = new EnvioEventoNotificacionDTO();
+            eventoDTO.setUsuarioId(user.getId());
+            eventoDTO.setEvento(EnumEventoAsociado.CHANGE_PASSWORD);
+            eventoDTO.setVariablesAdicionales(Map.of(
+                    "username", user.getUsername(),
+                    "email", user.getEmail(),
+                    "fecha_cambio", LocalDateTime.now().toString()));
+            notificacionClient.enviarPorEvento(eventoDTO);
+        } catch (Exception e) {
+            log.error("Error enviando notificación de cambio de contraseña: {}", e.getMessage());
+        }
     }
 }

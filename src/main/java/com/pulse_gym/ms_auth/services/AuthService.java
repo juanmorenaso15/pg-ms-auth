@@ -202,7 +202,8 @@ public class AuthService {
         userAuthRepository.save(user);
 
         JwtDTO jwtDTO = new JwtDTO();
-        String jwt = jwtService.generateToken(user.getId(), user.getRol().name(), user.getEmail());
+        String jwt = jwtService.generateToken(user.getId(), user.getRol().name(), user.getEmail(),
+                user.getUsername());
         jwtDTO.setJwt(jwt);
         response.setMessage("Inicio de sesión exitoso");
         response.setData(jwtDTO);
@@ -384,7 +385,8 @@ public class AuthService {
         User authUser = userAuthRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("Usuario de autenticación no encontrado"));
 
-        String jwt = jwtService.generateToken(authUser.getId(), authUser.getRol().name(), authUser.getEmail());
+        String jwt = jwtService.generateToken(authUser.getId(), authUser.getRol().name(), authUser.getEmail(),
+                authUser.getUsername());
 
         JwtDTO jwtDTO = new JwtDTO();
         jwtDTO.setJwt(jwt);
@@ -479,6 +481,19 @@ public class AuthService {
         dto.setUsername(user.getUsername());
         dto.setRol(user.getRol());
         dto.setEstado(user.getEstado());
+        dto.setFechaRegistro(user.getFechaRegistro());
+
+        if (user.getEmail() != null && usuarioClient != null) {
+            try {
+                UsuarioPerfilResponseDTO perfil = usuarioClient.obtenerUsuarioPorEmail(user.getEmail());
+                if (perfil != null && perfil.getFotoUrl() != null && !perfil.getFotoUrl().isBlank()) {
+                    dto.setFotoUrl(perfil.getFotoUrl());
+                }
+            } catch (Exception e) {
+                dto.setFotoUrl(null);
+            }
+        }
+
         return dto;
     }
 

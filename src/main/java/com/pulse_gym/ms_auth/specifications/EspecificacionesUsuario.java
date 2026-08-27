@@ -9,20 +9,30 @@ public class EspecificacionesUsuario {
 
     public static Specification<User> tieneEstado(Boolean estado) {
         return (root, query, cb) -> {
-            if (estado == null) return cb.conjunction();
+            if (estado == null)
+                return cb.conjunction();
             return cb.equal(root.get("estado"), estado);
         };
     }
 
     public static Specification<User> tieneRol(String rol) {
         return (root, query, cb) -> {
-            if (rol == null || rol.isBlank()) return cb.conjunction();
+            if (rol == null || rol.isBlank())
+                return cb.conjunction();
             try {
                 EnumRol rolEnum = EnumRol.valueOf(rol.toLowerCase());
                 return cb.equal(root.get("rol"), rolEnum);
             } catch (IllegalArgumentException e) {
-                return cb.disjunction(); // nunca se cumple
+                return cb.disjunction();
             }
+        };
+    }
+
+    public static Specification<User> contieneUsername(String username) {
+        return (root, query, cb) -> {
+            if (username == null || username.isBlank())
+                return cb.conjunction();
+            return cb.like(cb.lower(root.get("username")), "%" + username.toLowerCase() + "%");
         };
     }
 }

@@ -1,13 +1,17 @@
 package com.pulse_gym.ms_auth.repository;
 
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import com.pulse_gym.lb_common.entity.auth.User;
 
-public interface UserAuthRepository extends JpaRepository<User, Long>, JpaSpecificationExecutor <User> {
+public interface UserAuthRepository extends JpaRepository<User, Long>, JpaSpecificationExecutor<User> {
 
     /**
      * Busca un usuario por su email.
@@ -24,4 +28,7 @@ public interface UserAuthRepository extends JpaRepository<User, Long>, JpaSpecif
      * @return El usuario si existe, o vacío si no se encuentra
      */
     Optional<User> findByUsername(String username);
+
+    @Query("SELECT u.email, u.username FROM User u WHERE u.email = :email OR u.username = :username")
+    Optional<List<Object[]>> checkDuplicates(@Param("email") String email, @Param("username") String username);
 }

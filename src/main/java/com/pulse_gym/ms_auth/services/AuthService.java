@@ -2,6 +2,7 @@ package com.pulse_gym.ms_auth.services;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -13,13 +14,13 @@ import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.pulse_gym.lb_common.client.AuthServiceClient;
 import com.pulse_gym.lb_common.client.NotificacionClient;
 import com.pulse_gym.lb_common.client.UsuarioClient;
 import com.pulse_gym.lb_common.dto.AuthUserDTO;
@@ -222,9 +223,10 @@ public class AuthService {
         cacheManager.getCache("users").evict(requestDTO.getEmail());
 
         JwtDTO jwtDTO = new JwtDTO();
-        String jwt = jwtService.generateToken(user.getId(), user.getRol().name(), user.getEmail(),
-                user.getUsername());
+        String jwt = jwtService.generateToken(user.getId(), user.getRol().name(), user.getEmail(), user.getUsername());
         jwtDTO.setJwt(jwt);
+        jwtDTO.setRequiereCambioContrasena(Boolean.TRUE.equals(user.getRequiereCambioContrasena()));
+
         response.setMessage("Inicio de sesión exitoso");
         response.setData(jwtDTO);
 
@@ -426,6 +428,7 @@ public class AuthService {
         String encodedPassword = passwordEncoder.encode(requestDTO.getNewPassword());
 
         user.setPassword(encodedPassword);
+        user.setRequiereCambioContrasena(false);
         userAuthRepository.save(user);
 
         return new MessegeGlobalDTO("Contraseña actualizada exitosamente");
@@ -625,5 +628,126 @@ public class AuthService {
         } catch (Exception e) {
             log.error("Error enviando notificación de cambio de contraseña: {}", e.getMessage());
         }
+    }
+
+    /**
+     * Obtiene todos los usuarios sin paginación con filtros opcionales
+     * 
+     * @param rolHeader  Rol del usuario autenticado
+     * @param activo     Filtro por estado activo/inactivo
+     * @param rol        Filtro por rol del usuario
+     * @param username   Filtro por nombre de usuario
+     * @param ordenarPor Campo por el cual ordenar
+     * @param direccion  Dirección de ordenamiento (asc/desc)
+     * @return Lista de usuarios
+     */
+    public List<AuthUserDTO> obtenerTodosLosUsuariosSinPaginado(String rolHeader, Boolean activo, String rol,
+            String username, String ordenarPor, String direccion) {
+        ValidacionDeRoles.validarAdmin(rolHeader);
+
+        Specification<User> especificacion = Specification.where(null);
+        if (activo != null) {
+            especificacion = especificacion.and(EspecificacionesUsuario.tieneEstado(activo));
+        }
+        if (rol != null && !rol.isBlank()) {
+            especificacion = especificacion.and(EspecificacionesUsuario.tieneRol(rol));
+        }
+        if (username != null && !username.isBlank()) {
+            especificacion = especificacion.and(EspecificacionesUsuario.contieneUsername(username));
+        }
+
+        Sort sort = Sort.by(Sort.Direction.fromString(direccion), ordenarPor);
+        List<User> usuarios = userAuthRepository.findAll(especificacion, sort);
+
+        return convertirListaADTOOptimizado(usuarios, rolHeader);
+    }
+
+    /**
+     * Convierte una lista de usuarios a DTO incluyendo las fotos de perfil
+     * 
+     * @param usuarios  Lista de usuarios a convertir
+     * @param rolHeader Rol del usuario autenticado
+     * @return Lista de DTOs de usuarios
+     */
+    private List<AuthUserDTO> convertirListaADTOOptimizado(List<User> usuarios, String rolHeader) {
+        if (usuarios == null || usuarios.isEmpty()) {
+            return List.of();
+        }
+
+        Map<String, String> mapaFotosPorEmail = new HashMap<>();
+        if (usuarioClient != null) {
+            try {
+                List<UsuarioPerfilResponseDTO> perfiles = usuarioClient.obtenerTodosLosUsuarios(rolHeader);
+                if (perfiles != null) {
+                    for (UsuarioPerfilResponseDTO p : perfiles) {
+                        if (p.getEmail() != null && p.getFotoUrl() != null && !p.getFotoUrl().isBlank()) {
+                            mapaFotosPorEmail.put(p.getEmail().toLowerCase().trim(), p.getFotoUrl());
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.warn(" No se pudieron precargar fotos desde ms-users: {}", e.getMessage());
+            }
+        }
+
+        return usuarios.stream().map(user -> {
+            AuthUserDTO dto = new AuthUserDTO();
+            dto.setId(user.getId());
+            dto.setEmail(user.getEmail());
+            dto.setUsername(user.getUsername());
+            dto.setRol(user.getRol());
+            dto.setEstado(user.getEstado());
+            dto.setFechaRegistro(user.getFechaRegistro());
+
+            if (user.getEmail() != null) {
+                dto.setFotoUrl(mapaFotosPorEmail.get(user.getEmail().toLowerCase().trim()));
+            }
+
+            return dto;
+        }).collect(Collectors.toList());
+    }
+
+    /**
+     * Genera una contraseña temporal para un usuario (solo administradores,
+     * entrenadores o recepcionistas)
+     * 
+     * @param email   Email del usuario
+     * @param userRol Rol del usuario autenticado
+     * @return Contraseña temporal generada
+     */
+    @Transactional
+    public HttpGlobalResponse<String> generarContrasenaTemporalByAdmin(String email, String userRol) {
+        ValidacionDeRoles.validarAdminOEntrenadorORecepcionista(userRol);
+
+        User user = userAuthRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado con email: " + email));
+
+        String claveAleatoria = generarClaveAleatoria();
+
+        user.setPassword(passwordEncoder.encode(claveAleatoria));
+        user.setRequiereCambioContrasena(true);
+        userAuthRepository.save(user);
+
+        enviarNotificacionCambioContrasenaAsync(user);
+
+        HttpGlobalResponse<String> response = new HttpGlobalResponse<>();
+        response.setMessage("Contraseña temporal generada exitosamente.");
+        response.setData(claveAleatoria);
+        return response;
+    }
+
+    /**
+     * Genera una clave aleatoria segura para contraseña temporal
+     * 
+     * @return Clave aleatoria de 9 caracteres
+     */
+    private String generarClaveAleatoria() {
+        String caracteres = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$";
+        StringBuilder sb = new StringBuilder();
+        java.security.SecureRandom random = new java.security.SecureRandom();
+        for (int i = 0; i < 9; i++) {
+            sb.append(caracteres.charAt(random.nextInt(caracteres.length())));
+        }
+        return sb.toString();
     }
 }

@@ -365,25 +365,56 @@ public class AuthController {
      * @return Mensaje de éxito o error
      */
     @PostMapping("/change-password-by-admin")
-    public ResponseEntity<MessegeGlobalDTO> changePasswordByAdmin(
+    public ResponseEntity<HttpGlobalResponse<String>> changePasswordByAdmin(
             @Valid @RequestBody ChangePasswordByAdminRequestDTO requestDTO,
             @RequestHeader(value = "X-User-Rol", required = false) String userRol) {
         try {
-            MessegeGlobalDTO response = authService.changePasswordByAdmin(
+            HttpGlobalResponse<String> response = authService.generarContrasenaTemporalByAdmin(
                     requestDTO.getEmail(),
-                    requestDTO,
                     userRol);
             return ResponseEntity.status(HttpStatus.OK).body(response);
         } catch (SecurityAuthorizationException e) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(new MessegeGlobalDTO(e.getMessage()));
+            HttpGlobalResponse<String> err = new HttpGlobalResponse<>();
+            err.setMessage(e.getMessage());
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(err);
         } catch (RuntimeException e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(new MessegeGlobalDTO(e.getMessage()));
+            HttpGlobalResponse<String> err = new HttpGlobalResponse<>();
+            err.setMessage(e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(err);
         } catch (Exception e) {
             e.printStackTrace();
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new MessegeGlobalDTO("Error al cambiar la contraseña"));
+            HttpGlobalResponse<String> err = new HttpGlobalResponse<>();
+            err.setMessage("Error al generar contraseña temporal");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(err);
+        }
+    }
+
+    /**
+     * Obtiene todos los usuarios sin paginación (solo para administradores)
+     * 
+     * @param rolHeader  Rol del usuario autenticado (header)
+     * @param activo     Filtro por estado activo/inactivo
+     * @param rol        Filtro por rol del usuario
+     * @param username   Filtro por nombre de usuario
+     * @param ordenarPor Campo por el cual ordenar
+     * @param direccion  Dirección de ordenamiento (asc/desc)
+     * @return Lista de usuarios
+     */
+    @GetMapping("/usuarios/todos")
+    public ResponseEntity<List<AuthUserDTO>> obtenerTodosLosUsuariosSinPaginacion(
+            @RequestHeader(value = "X-User-Rol", required = false) String rolHeader,
+            @RequestParam(required = false) Boolean activo,
+            @RequestParam(required = false) String rol,
+            @RequestParam(required = false) String username,
+            @RequestParam(defaultValue = "id") String ordenarPor,
+            @RequestParam(defaultValue = "asc") String direccion) {
+        try {
+            List<AuthUserDTO> respuesta = authService.obtenerTodosLosUsuariosSinPaginado(
+                    rolHeader, activo, rol, username, ordenarPor, direccion);
+            return ResponseEntity.ok(respuesta);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
         }
     }
 

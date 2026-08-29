@@ -708,12 +708,13 @@ public class AuthService {
     }
 
     /**
-     * Genera una contraseña temporal para un usuario (solo administradores,
-     * entrenadores o recepcionistas)
+     * Genera una contraseña temporal para un usuario (administradores, entrenadores
+     * o recepcionistas)
+     * y la envía directamente al correo electrónico del usuario.
      * 
      * @param email   Email del usuario
      * @param userRol Rol del usuario autenticado
-     * @return Contraseña temporal generada
+     * @return Confirmación de envío
      */
     @Transactional
     public HttpGlobalResponse<String> generarContrasenaTemporalByAdmin(String email, String userRol) {
@@ -728,11 +729,18 @@ public class AuthService {
         user.setRequiereCambioContrasena(true);
         userAuthRepository.save(user);
 
+        try {
+            emailService.sendTemporaryPasswordEmail(user.getEmail(), user.getUsername(), claveAleatoria);
+        } catch (Exception e) {
+            log.error("Error al enviar la contraseña temporal por correo a {}: {}", email, e.getMessage());
+            throw new RuntimeException("No se pudo enviar la contraseña al correo del usuario.");
+        }
+
         enviarNotificacionCambioContrasenaAsync(user);
 
         HttpGlobalResponse<String> response = new HttpGlobalResponse<>();
-        response.setMessage("Contraseña temporal generada exitosamente.");
-        response.setData(claveAleatoria);
+        response.setMessage("La contraseña temporal ha sido generada y enviada al correo del usuario.");
+        response.setData("EMAIL_SENT");
         return response;
     }
 

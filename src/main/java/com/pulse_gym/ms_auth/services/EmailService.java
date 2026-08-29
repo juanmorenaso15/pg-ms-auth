@@ -236,4 +236,74 @@ public class EmailService {
             throw new RuntimeException("No se pudo enviar el email de recuperación", e);
         }
     }
+
+    /**
+     * Envía un email con la contraseña temporal generada por administración.
+     * 
+     * @param to                 Email del destinatario
+     * @param username           Nombre del usuario
+     * @param contrasenaTemporal Contraseña temporal generada
+     */
+    public void sendTemporaryPasswordEmail(String to, String username, String contrasenaTemporal) {
+        if (to == null || to.isBlank()) {
+            throw new RuntimeException("El email del destinatario no puede estar vacío");
+        }
+
+        try {
+            MimeMessage mimeMessage = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
+
+            helper.setFrom(fromEmail);
+            helper.setTo(to);
+            helper.setSubject("Acceso Temporal - Pulse Gym");
+
+            String htmlContent = String.format(
+                    """
+                            <!DOCTYPE html>
+                            <html>
+                            <head>
+                                <meta charset="UTF-8">
+                                <style>
+                                    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #2c3e50; background-color: #f4f6fa; margin: 0; padding: 20px; }
+                                    .container { max-width: 550px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); overflow: hidden; }
+                                    .header { background: #051f42; color: white; padding: 30px 20px; text-align: center; }
+                                    .header h1 { margin: 0; font-size: 24px; }
+                                    .content { padding: 30px; }
+                                    .temp-key-box { background: #f1f5f9; border: 2px dashed #051f42; border-radius: 10px; padding: 16px; text-align: center; font-size: 22px; font-weight: bold; color: #051f42; letter-spacing: 3px; margin: 20px 0; }
+                                    .footer { background: #f8fafc; padding: 20px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0; }
+                                </style>
+                            </head>
+                            <body>
+                                <div class="container">
+                                    <div class="header">
+                                        <h1>Pulse Gym</h1>
+                                        <p style="margin: 5px 0 0; opacity: 0.8; font-size: 13px;">Reestablecimiento de acceso</p>
+                                    </div>
+                                    <div class="content">
+                                        <p style="font-size: 16px;">Hola <strong>%s</strong>,</p>
+                                        <p>Un administrador ha generado una <strong>contraseña temporal</strong> de un solo uso para tu cuenta.</p>
+                                        <p>Utiliza la siguiente clave para iniciar sesión:</p>
+
+                                        <div class="temp-key-box">%s</div>
+
+                                        <p style="font-size: 13px; color: #64748b;"><strong>Nota:</strong> Al ingresar con esta clave, el sistema te solicitará cambiarla obligatoriamente por una nueva contraseña de tu preferencia.</p>
+                                    </div>
+                                    <div class="footer">
+                                        © 2026 Pulse Gym - Todos los derechos reservados.
+                                    </div>
+                                </div>
+                            </body>
+                            </html>
+                            """,
+                    username, contrasenaTemporal);
+
+            helper.setText(htmlContent, true);
+            mailSender.send(mimeMessage);
+
+            log.info("Email de clave temporal enviado exitosamente a: {}", to);
+        } catch (MessagingException e) {
+            log.error("Error al enviar email de clave temporal a {}: {}", to, e.getMessage());
+            throw new RuntimeException("No se pudo enviar el correo con la contraseña temporal", e);
+        }
+    }
 }

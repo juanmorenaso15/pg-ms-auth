@@ -35,4 +35,24 @@ public class EspecificacionesUsuario {
             return cb.like(cb.lower(root.get("username")), "%" + username.toLowerCase() + "%");
         };
     }
+
+    public static Specification<User> busquedaGeneral(String busqueda) {
+        return (root, query, cb) -> {
+            if (busqueda == null || busqueda.isBlank())
+                return cb.conjunction();
+            String patron = "%" + busqueda.toLowerCase() + "%";
+            return cb.or(
+                cb.like(cb.lower(root.get("username")), patron),
+                cb.like(cb.lower(root.get("email")), patron)
+            );
+        };
+    }
+
+    public static Specification<User> contieneEmail(String email) {
+        return (root, query, cb) -> {
+            if (email == null || email.isBlank())
+                return cb.conjunction();
+            return cb.like(cb.lower(root.get("email")), "%" + email.toLowerCase() + "%");
+        };
+    }
 }

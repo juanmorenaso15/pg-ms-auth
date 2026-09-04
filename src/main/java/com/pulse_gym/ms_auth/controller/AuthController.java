@@ -294,6 +294,8 @@ public class AuthController {
             @RequestParam(required = false) Boolean activo,
             @RequestParam(required = false) String rol,
             @RequestParam(required = false) String username,
+            @RequestParam(required = false) String email,
+            @RequestParam(required = false) String busqueda,
             @RequestParam(defaultValue = "0") int pagina,
             @RequestParam(defaultValue = "10") int tamanio,
             @RequestParam(defaultValue = "id") String ordenarPor,
@@ -302,7 +304,7 @@ public class AuthController {
             Pageable pageable = PageRequest.of(pagina, tamanio,
                     Sort.by(Sort.Direction.fromString(direccion), ordenarPor));
             RespuestaPaginadaDTO<AuthUserDTO> respuesta = authService.obtenerUsuariosConFiltros(rolHeader, activo, rol,
-                    username,
+                    username, email, busqueda,
                     pageable);
             return ResponseEntity.ok(respuesta);
         } catch (Exception e) {
@@ -418,4 +420,22 @@ public class AuthController {
         }
     }
 
+    /**
+     * Cambia el estado de un usuario por email (endpoint interno para Auth)
+     * 
+     * @param email  Email del usuario
+     * @param estado Nuevo estado (true = activo, false = inactivo)
+     */
+    @PutMapping("/api/internal/users/email/estado")
+    public ResponseEntity<Void> cambiarEstadoInternoPorEmail(
+            @RequestParam String email,
+            @RequestParam Boolean estado) {
+        User user = userAuthRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado con email: " + email));
+        
+        user.setEstado(estado);
+        userAuthRepository.save(user);
+        
+        return ResponseEntity.ok().build();
+    }
 }

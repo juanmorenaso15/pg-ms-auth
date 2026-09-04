@@ -444,8 +444,8 @@ public class AuthService {
      * @param pageable  objeto de paginación
      * @return respuesta paginada con AuthUserDTO
      */
-    public RespuestaPaginadaDTO<AuthUserDTO> obtenerUsuariosConFiltros(String rolHeader, Boolean activo, String rol,
-            String username,
+public RespuestaPaginadaDTO<AuthUserDTO> obtenerUsuariosConFiltros(String rolHeader, Boolean activo, String rol,
+            String username, String email, String busqueda,
             Pageable pageable) {
         ValidacionDeRoles.validarAdmin(rolHeader);
 
@@ -458,6 +458,12 @@ public class AuthService {
         }
         if (username != null && !username.isBlank()) {
             especificacion = especificacion.and(EspecificacionesUsuario.contieneUsername(username));
+        }
+        if (email != null && !email.isBlank()) {
+            especificacion = especificacion.and(EspecificacionesUsuario.contieneEmail(email));
+        }
+        if (busqueda != null && !busqueda.isBlank()) {
+            especificacion = especificacion.and(EspecificacionesUsuario.busquedaGeneral(busqueda));
         }
 
         Page<User> paginaUsuarios = userAuthRepository.findAll(especificacion, pageable);

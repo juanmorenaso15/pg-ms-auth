@@ -432,10 +432,36 @@ public class AuthController {
             @RequestParam Boolean estado) {
         User user = userAuthRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado con email: " + email));
-        
+
         user.setEstado(estado);
         userAuthRepository.save(user);
-        
+
         return ResponseEntity.ok().build();
+    }
+
+    /**
+     * Obtiene todos los usuarios del sistema (endpoint interno para otros
+     * microservicios)
+     * 
+     * @return Lista de todos los usuarios
+     */
+    @GetMapping("/api/internal/users/all")
+    public ResponseEntity<List<AuthUserDTO>> obtenerTodosLosUsuariosInterno() {
+        try {
+            List<User> users = userAuthRepository.findAll();
+            List<AuthUserDTO> dtos = users.stream().map(user -> {
+                AuthUserDTO dto = new AuthUserDTO();
+                dto.setId(user.getId());
+                dto.setEmail(user.getEmail());
+                dto.setUsername(user.getUsername());
+                dto.setRol(user.getRol());
+                dto.setEstado(user.getEstado());
+                return dto;
+            }).collect(Collectors.toList());
+
+            return ResponseEntity.ok(dtos);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+        }
     }
 }

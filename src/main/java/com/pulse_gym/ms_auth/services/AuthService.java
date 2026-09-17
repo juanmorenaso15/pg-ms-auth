@@ -137,7 +137,7 @@ public class AuthService {
         user.setUsername(requestDTO.getUsername());
         user.setRol(requestDTO.getRol());
         user.setEstado(requestDTO.getEstado());
-        user.setFechaRegistro(LocalDateTime.now());
+        user.setFechaRegistro(com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia());
 
         userAuthRepository.save(user);
 
@@ -163,7 +163,7 @@ public class AuthService {
                     "username", user.getUsername(),
                     "email", user.getEmail(),
                     "nombre", user.getUsername(),
-                    "fecha_registro", LocalDateTime.now().toString()));
+                    "fecha_registro", com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().toString()));
             notificacionClient.enviarPorEvento(eventoDTO);
         } catch (Exception e) {
             log.error("Error enviando notificación de registro: {}", e.getMessage());
@@ -196,7 +196,7 @@ public class AuthService {
 
         if (user.isLocked()) {
             long secondsRemaining = Duration.between(
-                    LocalDateTime.now(),
+                    com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia(),
                     user.getLockTime().plusSeconds(LOCK_DURATION_SECONDS)).getSeconds();
             response.setMessage(
                     "Demasiados intentos fallidos. Cuenta bloqueada por " + secondsRemaining + " segundos.");
@@ -275,7 +275,7 @@ public class AuthService {
         PasswordResetToken resetToken = new PasswordResetToken();
         resetToken.setToken(token);
         resetToken.setUser(user);
-        resetToken.setExpiryDate(LocalDateTime.now().plusMinutes(tokenExpirationMinutes));
+        resetToken.setExpiryDate(com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().plusMinutes(tokenExpirationMinutes));
         resetToken.setUsed(false);
 
         tokenRepository.save(resetToken);
@@ -629,7 +629,7 @@ public RespuestaPaginadaDTO<AuthUserDTO> obtenerUsuariosConFiltros(String rolHea
             eventoDTO.setVariablesAdicionales(Map.of(
                     "username", user.getUsername(),
                     "email", user.getEmail(),
-                    "fecha_cambio", LocalDateTime.now().toString()));
+                    "fecha_cambio", com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().toString()));
             notificacionClient.enviarPorEvento(eventoDTO);
         } catch (Exception e) {
             log.error("Error enviando notificación de cambio de contraseña: {}", e.getMessage());

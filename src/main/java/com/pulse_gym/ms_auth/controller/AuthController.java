@@ -35,6 +35,7 @@ import com.pulse_gym.lb_common.dto.HttpGlobalResponse;
 import com.pulse_gym.lb_common.dto.JwtDTO;
 import com.pulse_gym.ms_auth.dto.LoginRequestDTO;
 import com.pulse_gym.ms_auth.dto.RegisterRequestDTO;
+import com.pulse_gym.ms_auth.dto.UsuarioMetricasDTO;
 import com.pulse_gym.ms_auth.repository.UserAuthRepository;
 import com.pulse_gym.ms_auth.services.AuthService;
 import com.pulse_gym.ms_auth.services.BiometricTokenService;
@@ -461,6 +462,24 @@ public class AuthController {
 
             return ResponseEntity.ok(dtos);
         } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+        }
+    }
+
+    /**
+     * Obtiene las métricas resumidas de usuarios (total, activos, inactivos y nuevos del mes).
+     * 
+     * @param rolHeader Rol del usuario que realiza la petición (X-User-Rol)
+     * @return DTO con las métricas consolidadas
+     */
+    @GetMapping("/usuarios/metricas")
+    public ResponseEntity<UsuarioMetricasDTO> obtenerMetricasUsuarios(
+            @RequestHeader(value = "X-User-Rol", required = false) String rolHeader) {
+        try {
+            UsuarioMetricasDTO metricas = authService.obtenerMetricasUsuarios(rolHeader);
+            return ResponseEntity.ok(metricas);
+        } catch (Exception e) {
+            e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
         }
     }

@@ -29,6 +29,41 @@ public interface UserAuthRepository extends JpaRepository<User, Long>, JpaSpecif
      */
     Optional<User> findByUsername(String username);
 
+    /**
+     * 
+     * @param email
+     * @param username
+     * @return
+     */
     @Query("SELECT u.email, u.username FROM User u WHERE u.email = :email OR u.username = :username")
     Optional<List<Object[]>> checkDuplicates(@Param("email") String email, @Param("username") String username);
+
+    /**
+     * 
+     * @return
+     */
+    @Query("SELECT COUNT(u) FROM User u")
+    long contarTotalUsuarios();
+
+    /**
+     * 
+     * @return
+     */
+    @Query("SELECT COUNT(u) FROM User u WHERE u.estado = true")
+    long contarUsuariosActivos();
+
+    /**
+     * 
+     * @return
+     */
+    @Query("SELECT COUNT(u) FROM User u WHERE u.estado = false OR u.estado IS NULL")
+    long contarUsuariosInactivos();
+
+    /**
+     * 
+     * @param inicioMes
+     * @return
+     */
+    @Query("SELECT COUNT(u) FROM User u WHERE u.fechaRegistro >= :inicioMes")
+    long contarNuevosDesde(@Param("inicioMes") java.time.LocalDateTime inicioMes);
 }

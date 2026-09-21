@@ -42,6 +42,7 @@ import com.pulse_gym.lb_common.services.JwtService;
 import com.pulse_gym.lb_common.services.ValidacionDeRoles;
 import com.pulse_gym.ms_auth.dto.LoginRequestDTO;
 import com.pulse_gym.ms_auth.dto.RegisterRequestDTO;
+import com.pulse_gym.ms_auth.dto.UsuarioMetricasDTO;
 import com.pulse_gym.ms_auth.repository.PasswordResetTokenRepository;
 import com.pulse_gym.ms_auth.repository.UserAuthRepository;
 import com.pulse_gym.ms_auth.specifications.EspecificacionesUsuario;
@@ -706,5 +707,28 @@ public RespuestaPaginadaDTO<AuthUserDTO> obtenerUsuariosConFiltros(String rolHea
             sb.append(caracteres.charAt(random.nextInt(caracteres.length())));
         }
         return sb.toString();
+    }
+
+    /**
+     * Obtiene las métricas generales de usuarios sin necesidad de listar todos los registros.
+     * 
+     * @param rolHeader Rol del usuario autenticado para validación
+     * @return DTO con totales, activos, inactivos y nuevos del mes
+     */
+    public UsuarioMetricasDTO obtenerMetricasUsuarios(String rolHeader) {
+        ValidacionDeRoles.validarAdmin(rolHeader);
+
+        long total = userAuthRepository.contarTotalUsuarios();
+        long activos = userAuthRepository.contarUsuariosActivos();
+        long inactivos = userAuthRepository.contarUsuariosInactivos();
+
+        java.time.LocalDateTime inicioMes = com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia()
+                .withDayOfMonth(1)
+                .toLocalDate()
+                .atStartOfDay();
+
+        long nuevosMes = userAuthRepository.contarNuevosDesde(inicioMes);
+
+        return new UsuarioMetricasDTO(total, activos, inactivos, nuevosMes);
     }
 }

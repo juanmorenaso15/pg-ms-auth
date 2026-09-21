@@ -16,7 +16,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -81,6 +80,13 @@ public class AuthService {
      */
     private final UsuarioClient usuarioClient;
 
+    /**
+     * Dispara los eventos de notificacion (registro, login, cambio de
+     * contraseña) en un bean aparte para que @Async funcione de verdad (ver
+     * NotificacionAsyncTrigger para el detalle de por que).
+     */
+    private final NotificacionAsyncTrigger notificacionAsyncTrigger;
+
     @Autowired
     private CacheManager cacheManager;
 
@@ -142,32 +148,10 @@ public class AuthService {
         userAuthRepository.save(user);
 
         if (notificacionClient != null) {
-            enviarNotificacionRegistroAsync(user);
+            notificacionAsyncTrigger.enviarNotificacionRegistro(user);
         }
 
         return new MessegeGlobalDTO("Se ha registrado correctamente");
-    }
-
-    /**
-     * Envía una notificación de registro de usuario de manera asíncrona.
-     * 
-     * @param user Usuario recién registrado
-     */
-    @Async
-    public void enviarNotificacionRegistroAsync(User user) {
-        try {
-            EnvioEventoNotificacionDTO eventoDTO = new EnvioEventoNotificacionDTO();
-            eventoDTO.setUsuarioId(user.getId());
-            eventoDTO.setEvento(EnumEventoAsociado.REGISTRO_USUARIO);
-            eventoDTO.setVariablesAdicionales(Map.of(
-                    "username", user.getUsername(),
-                    "email", user.getEmail(),
-                    "nombre", user.getUsername(),
-                    "fecha_registro", com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().toString()));
-            notificacionClient.enviarPorEvento(eventoDTO);
-        } catch (Exception e) {
-            log.error("Error enviando notificación de registro: {}", e.getMessage());
-        }
     }
 
     /**
@@ -231,7 +215,7 @@ public class AuthService {
         response.setData(jwtDTO);
 
         if (notificacionClient != null) {
-            enviarNotificacionLoginAsync(user);
+            notificacionAsyncTrigger.enviarNotificacionLogin(user);
         }
 
         return response;
@@ -547,26 +531,6 @@ public RespuestaPaginadaDTO<AuthUserDTO> obtenerUsuariosConFiltros(String rolHea
     /**
      * Obtiene un usuario por su email, utilizando caché para mejorar el
      * rendimiento.
-     *
-     * @param email El email del usuario
-     * @return Optional con el usuario si existe, o vacío si no se encuentra
-     */
-    @Async
-    public void enviarNotificacionLoginAsync(User user) {
-        try {
-            EnvioEventoNotificacionDTO eventoDTO = new EnvioEventoNotificacionDTO();
-            eventoDTO.setUsuarioId(user.getId());
-            eventoDTO.setEvento(EnumEventoAsociado.LOGIN_USUARIO);
-            eventoDTO.setVariablesAdicionales(Map.of("username", user.getUsername(), "email", user.getEmail()));
-            notificacionClient.enviarPorEvento(eventoDTO);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    /**
-     * Obtiene un usuario por su email, utilizando caché para mejorar el
-     * rendimiento.
      * 
      * @param email
      * @return
@@ -610,30 +574,9 @@ public RespuestaPaginadaDTO<AuthUserDTO> obtenerUsuariosConFiltros(String rolHea
         user.setPassword(encodedPassword);
         userAuthRepository.save(user);
 
-        enviarNotificacionCambioContrasenaAsync(user);
+        notificacionAsyncTrigger.enviarNotificacionCambioContrasena(user);
 
         return new MessegeGlobalDTO("Contraseña actualizada exitosamente para el usuario: " + email);
-    }
-
-    /**
-     * Envía notificación de cambio de contraseña de manera asíncrona.
-     * 
-     * @param user Usuario al que se le cambió la contraseña
-     */
-    @Async
-    public void enviarNotificacionCambioContrasenaAsync(User user) {
-        try {
-            EnvioEventoNotificacionDTO eventoDTO = new EnvioEventoNotificacionDTO();
-            eventoDTO.setUsuarioId(user.getId());
-            eventoDTO.setEvento(EnumEventoAsociado.CHANGE_PASSWORD);
-            eventoDTO.setVariablesAdicionales(Map.of(
-                    "username", user.getUsername(),
-                    "email", user.getEmail(),
-                    "fecha_cambio", com.pulse_gym.lb_common.util.FechaUtils.ahoraColombia().toString()));
-            notificacionClient.enviarPorEvento(eventoDTO);
-        } catch (Exception e) {
-            log.error("Error enviando notificación de cambio de contraseña: {}", e.getMessage());
-        }
     }
 
     /**
@@ -742,7 +685,7 @@ public RespuestaPaginadaDTO<AuthUserDTO> obtenerUsuariosConFiltros(String rolHea
             throw new RuntimeException("No se pudo enviar la contraseña al correo del usuario.");
         }
 
-        enviarNotificacionCambioContrasenaAsync(user);
+        notificacionAsyncTrigger.enviarNotificacionCambioContrasena(user);
 
         HttpGlobalResponse<String> response = new HttpGlobalResponse<>();
         response.setMessage("La contraseña temporal ha sido generada y enviada al correo del usuario.");

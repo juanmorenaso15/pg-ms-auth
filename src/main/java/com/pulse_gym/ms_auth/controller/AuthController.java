@@ -33,6 +33,8 @@ import com.pulse_gym.lb_common.dto.ChangePasswordRequestDTO;
 import com.pulse_gym.lb_common.dto.ContrasenaOlvidada;
 import com.pulse_gym.lb_common.dto.HttpGlobalResponse;
 import com.pulse_gym.lb_common.dto.JwtDTO;
+import com.pulse_gym.lb_common.dto.UsuarioPerfilResponseDTO;
+import com.pulse_gym.lb_common.client.UsuarioClient;
 import com.pulse_gym.ms_auth.dto.LoginRequestDTO;
 import com.pulse_gym.ms_auth.dto.RegisterRequestDTO;
 import com.pulse_gym.ms_auth.dto.UsuarioMetricasDTO;
@@ -53,6 +55,7 @@ public class AuthController {
     private final UserAuthRepository userAuthRepository;
     private final BiometricTokenService biometricTokenService;
     private final JwtService jwtService;
+    private final UsuarioClient usuarioClient;
 
     /**
      * Registro de usuario
@@ -173,19 +176,32 @@ public class AuthController {
     /**
      * Genera un token biométrico JWT para un socio.
      * Valida que el usuario exista y tenga rol SOCIO.
-     * 
-     * @param request DTO con userId y deviceId
+     *
+     * IMPORTANTE: request.getUserId() es el idUsuario del PERFIL en pg-ms-users
+     * (no el id de la credencial en pg-ms-auth): así lo consumen luego
+     * /biometric/login y /api/asistencias/entrada-biometrica, que resuelven al
+     * socio vía usuarioClient.obtenerUsuarioPorIdInterno con ese mismo id.
+     *
+     * @param request DTO con userId (idUsuario de pg-ms-users) y deviceId
      * @return Token JWT biométrico firmado
      */
     @PostMapping("/biometric/token")
     public ResponseEntity<JwtDTO> generateBiometricToken(@Valid @RequestBody SolicitudTokenBiometricoDTO request) {
         try {
-            // Verificar que el usuario existe
-            User user = userAuthRepository.findById(request.getUserId())
-                    .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+            // Verificar que el perfil del socio existe en pg-ms-users
+            UsuarioPerfilResponseDTO perfil;
+            try {
+                perfil = usuarioClient.obtenerUsuarioPorIdInterno(request.getUserId());
+            } catch (Exception e) {
+                throw new RuntimeException("Usuario no encontrado");
+            }
+
+            if (perfil == null) {
+                throw new RuntimeException("Usuario no encontrado");
+            }
 
             // Verificar que sea socio
-            if (user.getRol() == null || !user.getRol().name().equalsIgnoreCase("socio")) {
+            if (perfil.getRol() == null || !perfil.getRol().name().equalsIgnoreCase("socio")) {
                 throw new RuntimeException("Solo los socios pueden generar tokens biométricos");
             }
 
